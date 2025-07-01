@@ -185,10 +185,64 @@ def save_image(image_bytes, output_filename):
         raise
 
 
+def generate_ad_image_bytes(product_name="perfume", brand_name="FROM INDEXES", 
+                           image_path="images/28a42a6d609f4c9aab116d92057b3367-goods.webp", 
+                           number_of_colors=None, colors=None, use_smart_colors=False):
+    """
+    Generate an advertisement image and return the image bytes directly.
+    
+    Args:
+        product_name (str): Name of the product
+        brand_name (str): Name of the brand
+        image_path (str): Path to the input image
+        number_of_colors (int, optional): Number of colors to use (1-3). If None, randomly selected.
+        colors (str or list, optional): Colors to use. If None, randomly selected.
+        use_smart_colors (bool): If True, uses AI vision to recommend colors based on the product image
+        
+    Returns:
+        bytes: The generated image as bytes
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info("Starting AD image generation process (bytes mode)...")
+        logger.info(f"Product: {product_name}, Brand: {brand_name}")
+        
+        # Load environment and initialize client
+        api_key = load_environment()
+        client = initialize_openai_client(api_key)
+        
+        # Get smart color recommendations if requested
+        if use_smart_colors and colors is None:
+            logger.info("Using smart color recommendations based on product image...")
+            smart_num_colors, smart_colors = get_smart_colors(product_name, image_path)
+            if smart_colors:
+                number_of_colors = smart_num_colors
+                colors = smart_colors
+                logger.info(f"Smart colors recommended: {colors}")
+            else:
+                logger.info("Smart color recommendation failed, using random selection")
+        
+        # Create prompt and validate input
+        prompt = create_template_prompt(product_name, brand_name, number_of_colors, colors)
+        validate_image_file(image_path)
+        
+        # Generate the image
+        result = edit_image_with_openai(client, image_path, prompt)
+        image_bytes = process_api_response(result)
+        
+        logger.info("AD image generation completed successfully (returning bytes)")
+        return image_bytes
+        
+    except Exception as e:
+        logger.error(f"AD image generation failed: {e}")
+        raise
+
+
 def generate_ad_image(product_name="perfume", brand_name="FROM INDEXES", 
                      image_path="images/28a42a6d609f4c9aab116d92057b3367-goods.webp", 
                      output_filename="gift-basket.webp", number_of_colors=None, colors=None,
-                     use_smart_colors=False):
+                     use_smart_colors=False, return_bytes=False):
     """
     Main function to generate an advertisement image.
     
@@ -196,13 +250,14 @@ def generate_ad_image(product_name="perfume", brand_name="FROM INDEXES",
         product_name (str): Name of the product
         brand_name (str): Name of the brand
         image_path (str): Path to the input image
-        output_filename (str): Name of the output file
+        output_filename (str): Name of the output file (ignored if return_bytes=True)
         number_of_colors (int, optional): Number of colors to use (1-3). If None, randomly selected.
         colors (str or list, optional): Colors to use. If None, randomly selected.
         use_smart_colors (bool): If True, uses AI vision to recommend colors based on the product image
+        return_bytes (bool): If True, returns image bytes instead of saving to file
         
     Returns:
-        str: Path to the generated image file
+        str or bytes: Path to the generated image file or image bytes (depending on return_bytes)
     """
     logger = logging.getLogger(__name__)
     
@@ -232,10 +287,14 @@ def generate_ad_image(product_name="perfume", brand_name="FROM INDEXES",
         # Generate the image
         result = edit_image_with_openai(client, image_path, prompt)
         image_bytes = process_api_response(result)
-        save_image(image_bytes, output_filename)
         
-        logger.info("AD image generation completed successfully")
-        return output_filename
+        if return_bytes:
+            logger.info("AD image generation completed successfully (returning bytes)")
+            return image_bytes
+        else:
+            save_image(image_bytes, output_filename)
+            logger.info("AD image generation completed successfully")
+            return output_filename
         
     except Exception as e:
         logger.error(f"AD image generation failed: {e}")

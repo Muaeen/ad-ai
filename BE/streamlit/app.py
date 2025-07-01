@@ -5,7 +5,7 @@ from PIL import Image
 import time
 
 # API Configuration
-API_BASE_URL = "http://main:8000"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 def main():
     st.set_page_config(
@@ -183,36 +183,70 @@ def generate_advertisement(product_name, brand_name, file_id, use_smart_colors=F
                 # Display success message
                 st.success("🎉 Advertisement generated successfully!")
                 
-                # Show download link
-                download_url = f"{API_BASE_URL}{result['download_url']}"
-                
                 # Display the generated image
                 st.subheader("🖼️ Your Generated Advertisement")
                 
-                # Download and display the image
-                img_response = requests.get(download_url)
-                if img_response.status_code == 200:
-                    # Save temporarily to display
-                    temp_filename = f"temp_ad_{int(time.time())}.jpg"
-                    with open(temp_filename, "wb") as f:
-                        f.write(img_response.content)
-                    
-                    # Display the image
-                    st.image(temp_filename, caption=f"{product_name} - {brand_name} Advertisement")
-                    
-                    # Provide download button
-                    st.download_button(
-                        label="📥 Download Advertisement",
-                        data=img_response.content,
-                        file_name=f"{product_name}_{brand_name}_ad.jpg",
-                        mime="image/jpeg"
-                    )
-                    
-                    # Clean up temp file
-                    if os.path.exists(temp_filename):
-                        os.remove(temp_filename)
+                # Get the image data from the API response
+                image_base64 = result.get('image_base64')
+                if image_base64:
+                    # Display image directly from base64 data
+                    try:
+                        import base64
+                        from io import BytesIO
+                        
+                        # Decode base64 to bytes
+                        image_bytes = base64.b64decode(image_base64)
+                        
+                        # Display the image
+                        st.image(image_bytes, caption=f"{product_name} - {brand_name} Advertisement")
+                        
+                        # Provide download button
+                        st.download_button(
+                            label="📥 Download Advertisement",
+                            data=image_bytes,
+                            file_name=f"{product_name}_{brand_name}_ad.jpg",
+                            mime="image/jpeg"
+                        )
+                        
+                    except Exception as img_error:
+                        st.error(f"Failed to display image: {img_error}")
+                        
+                        # Fallback: try MinIO URL if available
+                        minio_url = result.get('minio_url')
+                        if minio_url:
+                            try:
+                                st.image(minio_url, caption=f"{product_name} - {brand_name} Advertisement")
+                                
+                                # Download from MinIO for button
+                                img_response = requests.get(minio_url)
+                                if img_response.status_code == 200:
+                                    st.download_button(
+                                        label="📥 Download Advertisement",
+                                        data=img_response.content,
+                                        file_name=f"{product_name}_{brand_name}_ad.jpg",
+                                        mime="image/jpeg"
+                                    )
+                            except Exception as minio_error:
+                                st.error(f"Failed to display from MinIO: {minio_error}")
+                        else:
+                            st.error("No image data available")
                 else:
-                    st.error("Failed to load generated image")
+                    st.error("No image data received from API")
+                
+                # Show additional info
+                with st.expander("📋 Generation Details"):
+                    details = {
+                        "Product": product_name,
+                        "Brand": brand_name,
+                        "Smart Colors": use_smart_colors,
+                        "Display Source": "Direct from API (Base64)",
+                        "Saved to Bucket": "✅ Yes" if result.get('minio_url') else "❌ Failed",
+                        "Object Name": result.get('minio_object_name', 'N/A')
+                    }
+                    if result.get('minio_url'):
+                        details["MinIO URL"] = result.get('minio_url')
+                    
+                    st.json(details)
                 
                 # Cleanup backend files
                 cleanup_files(file_id)

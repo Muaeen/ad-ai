@@ -8,14 +8,16 @@ Provides endpoints for image upload, color recommendation, and ad generation.
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 import shutil
 import os
 import tempfile
 from typing import Optional, List
 import uuid
+from pathlib import Path
 
-from src.ad_generator import configure_logging, generate_ad_image, colors_recommendation
+from src.ad_generator import configure_logging, generate_ad_image, generate_ad_image_bytes, colors_recommendation
+from src.miniodb import MinioClient
 
 # Initialize FastAPI app
 app = FastAPI(title="AD-AI API", description="AI-powered advertisement generator")
@@ -32,7 +34,21 @@ app.add_middleware(
 # Configure logging
 logger = configure_logging()
 
-# Create uploads directory if it doesn't exist
+# Initialize MinIO client with environment-based configuration
+minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+minio_access_key = os.getenv("MINIO_ACCESS_KEY", "minio")
+minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minio123")
+minio_secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+
+minio_client = MinioClient(
+    endpoint=minio_endpoint,
+    access_key=minio_access_key,
+    secret_key=minio_secret_key,
+    secure=minio_secure
+)
+BUCKET_NAME = "ad-images"
+
+# Create uploads directory if it doesn't exist (for temporary storage)
 UPLOAD_DIR = "temp_uploads"
 OUTPUT_DIR = "generated_ads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -47,7 +63,7 @@ async def root():
 
 @app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
-    """Upload an image file and return the file path"""
+    """Upload an image file to MinIO bucket and return the file info"""
     try:
         # Validate file type
         if not file.content_type.startswith('image/'):
@@ -55,22 +71,31 @@ async def upload_image(file: UploadFile = File(...)):
         
         # Generate unique filename
         file_id = str(uuid.uuid4())
-        file_extension = os.path.splitext(file.filename)[1]
+        file_extension = Path(file.filename).suffix
         temp_filename = f"{file_id}{file_extension}"
-        temp_filepath = os.path.join(UPLOAD_DIR, temp_filename)
         
-        # Save uploaded file
+        # Save to temporary local storage first
+        temp_filepath = os.path.join(UPLOAD_DIR, temp_filename)
         with open(temp_filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        logger.info(f"Image uploaded: {temp_filepath}")
+        # Upload to MinIO bucket
+        minio_object_name = f"inputs/{temp_filename}"
+        minio_url = minio_client.upload_image(BUCKET_NAME, temp_filepath, minio_object_name)
+        
+        if not minio_url:
+            raise HTTPException(status_code=500, detail="Failed to upload image to storage")
+        
+        logger.info(f"Image uploaded to MinIO: {minio_url}")
         
         return {
             "success": True,
             "file_id": file_id,
             "filename": temp_filename,
-            "filepath": temp_filepath,
-            "message": "Image uploaded successfully"
+            "local_path": temp_filepath,
+            "minio_url": minio_url,
+            "minio_object_name": minio_object_name,
+            "message": "Image uploaded successfully to cloud storage"
         }
         
     except Exception as e:
@@ -85,7 +110,7 @@ async def recommend_colors(
 ):
     """Get AI color recommendations for a product"""
     try:
-        # Find uploaded file
+        # Find uploaded file in temp directory
         uploaded_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(file_id)]
         if not uploaded_files:
             raise HTTPException(status_code=404, detail="Uploaded image not found")
@@ -117,7 +142,7 @@ async def generate_ad(
     number_of_colors: Optional[int] = Form(None),
     colors: Optional[str] = Form(None)
 ):
-    """Generate advertisement image"""
+    """Generate advertisement image and save to MinIO bucket"""
     try:
         # Find uploaded file
         uploaded_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(file_id)]
@@ -138,23 +163,53 @@ async def generate_ad(
         logger.info(f"Generating ad for {product_name} by {brand_name}")
         logger.info(f"Use smart colors: {use_smart_colors}, Manual colors: {colors_list}")
         
-        # Generate the advertisement
-        result_file = generate_ad_image(
+        # Generate the advertisement as bytes for direct MinIO upload
+        image_bytes = generate_ad_image_bytes(
             product_name=product_name,
             brand_name=brand_name,
             image_path=image_path,
-            output_filename=output_filename,
             number_of_colors=number_of_colors,
             colors=colors_list,
             use_smart_colors=use_smart_colors
         )
         
+        # Also save locally as backup
+        with open(output_filename, "wb") as f:
+            f.write(image_bytes)
+        
+        # Upload generated image to MinIO bucket (in background/parallel)
+        output_filename_only = os.path.basename(output_filename)
+        minio_object_name = f"outputs/{output_filename_only}"
+        
+        # Try to upload to MinIO but don't block the response
+        minio_url = None
+        try:
+            minio_url = minio_client.upload_image_from_bytes(
+                BUCKET_NAME, 
+                image_bytes, 
+                minio_object_name,
+                content_type="image/jpeg"
+            )
+            if minio_url:
+                logger.info(f"Generated ad uploaded to MinIO: {minio_url}")
+            else:
+                logger.warning("Failed to upload generated image to MinIO")
+        except Exception as e:
+            logger.warning(f"MinIO upload failed, but proceeding: {e}")
+        
+        # Encode image bytes to base64 for direct display
+        import base64
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
         return {
             "success": True,
             "product_name": product_name,
             "brand_name": brand_name,
-            "output_file": result_file,
-            "download_url": f"/download/{os.path.basename(result_file)}",
+            "local_file": output_filename,
+            "minio_url": minio_url,
+            "minio_object_name": minio_object_name,
+            "image_base64": image_base64,
+            "download_url": f"/download/{output_filename_only}",
             "message": "Advertisement generated successfully"
         }
         
@@ -165,44 +220,82 @@ async def generate_ad(
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
-    """Download generated advertisement file"""
+    """Download generated advertisement file from MinIO or local storage"""
     try:
-        file_path = os.path.join(OUTPUT_DIR, filename)
+        # First try to get from MinIO
+        minio_object_name = f"outputs/{filename}"
+        minio_url = minio_client.get_image_url(BUCKET_NAME, minio_object_name)
         
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="File not found")
+        if minio_url:
+            # Return redirect to MinIO URL
+            return JSONResponse({
+                "success": True,
+                "download_url": minio_url,
+                "source": "minio"
+            })
         
-        return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type='image/jpeg'
-        )
+        # Fallback to local file
+        local_file_path = os.path.join(OUTPUT_DIR, filename)
+        if os.path.exists(local_file_path):
+            # For local files, we'd need to serve them directly
+            # But since we want to use MinIO, let's upload to MinIO first
+            minio_url = minio_client.upload_image(BUCKET_NAME, local_file_path, minio_object_name)
+            if minio_url:
+                return JSONResponse({
+                    "success": True,
+                    "download_url": minio_client.get_image_url(BUCKET_NAME, minio_object_name),
+                    "source": "uploaded_to_minio"
+                })
+        
+        raise HTTPException(status_code=404, detail="File not found")
         
     except Exception as e:
         logger.error(f"File download failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to download file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get download URL: {str(e)}")
 
 
 @app.delete("/cleanup/{file_id}")
 async def cleanup_files(file_id: str):
-    """Clean up temporary files"""
+    """Clean up temporary files (local only, MinIO files are kept)"""
     try:
-        # Clean up uploaded file
+        # Clean up uploaded file from local temp storage
         uploaded_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(file_id)]
         for file in uploaded_files:
             file_path = os.path.join(UPLOAD_DIR, file)
             if os.path.exists(file_path):
                 os.remove(file_path)
-                logger.info(f"Cleaned up: {file_path}")
+                logger.info(f"Cleaned up local temp file: {file_path}")
         
         return {
             "success": True,
-            "message": f"Cleaned up files for {file_id}"
+            "message": f"Cleaned up temporary files for {file_id}"
         }
         
     except Exception as e:
         logger.error(f"Cleanup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cleanup files: {str(e)}")
+
+
+@app.get("/list-images/{image_type}")
+async def list_images(image_type: str):
+    """List images from MinIO bucket (inputs or outputs)"""
+    try:
+        if image_type not in ["inputs", "outputs"]:
+            raise HTTPException(status_code=400, detail="image_type must be 'inputs' or 'outputs'")
+        
+        prefix = f"{image_type}/"
+        images = minio_client.list_images(BUCKET_NAME, prefix=prefix)
+        
+        return {
+            "success": True,
+            "image_type": image_type,
+            "images": images,
+            "count": len(images)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to list images: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list images: {str(e)}")
 
 
 if __name__ == "__main__":
