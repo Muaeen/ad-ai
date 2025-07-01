@@ -5,7 +5,7 @@ from PIL import Image
 import time
 
 # API Configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://main:8000"
 
 def main():
     st.set_page_config(
