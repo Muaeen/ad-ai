@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import { SignedIn, SignedOut, SignInButton, SignUpButton } from '@clerk/clerk-react'
 import Header from './components/Header'
 import ImageUpload from './components/ImageUpload'
@@ -6,6 +7,8 @@ import ProductDetails from './components/ProductDetails'
 import ColorSelection from './components/ColorSelection'
 import AdGeneration from './components/AdGeneration'
 import ProgressBar from './components/ProgressBar'
+import Footer from './components/Footer'
+import ContactUs from './components/ContactUs'
 import { Sparkles, Image, Palette, Zap } from 'lucide-react'
 import { cancelGeneration } from './services/api'
 
@@ -175,7 +178,7 @@ function App() {
     }
   }
 
-  return (
+  const HomePage = () => (
     <div style={{ minHeight: '100vh' }}>
       <Header />
       
@@ -213,10 +216,20 @@ function App() {
             <div>
               {renderStep()}
             </div>
+            
+            {/* Footer only on upload page (step 1) */}
+            {currentStep === 1 && <Footer />}
           </SignedIn>
         </div>
       </main>
     </div>
+  )
+
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/contact" element={<ContactUs />} />
+    </Routes>
   )
 }
 

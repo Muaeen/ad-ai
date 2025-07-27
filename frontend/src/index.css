@@ -358,3 +358,45 @@ label {
   color: #166534;
   margin-top: 1rem;
 }
+
+/* Custom button from Uiverse.io by reshades */
+.custom-button {
+  background-color: #000;
+  color: #fff;
+  width: 8.5em;
+  height: 2.9em;
+  border: #000000 0.2em solid;
+  border-radius: 11px;
+  text-align: right;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.custom-button:hover {
+  background-color: #555555;
+}
+
+.custom-button svg {
+  width: 1.6em;
+  margin: -0.2em 0.8em 1em;
+  position: absolute;
+  display: flex;
+  transition: all 0.6s ease;
+}
+
+.custom-button:hover svg {
+  transform: translateX(5px);
+}
+
+.text {
+  margin: 0 1.5em;
+}
+
+.custom-button-centered {
+  text-align: center;
+}
+
+.custom-button-centered .text {
+  margin: 0;
+}
