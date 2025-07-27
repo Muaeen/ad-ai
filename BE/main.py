@@ -14,11 +14,16 @@ import os
 import tempfile
 from typing import Optional, List
 import uuid
+import asyncio
+from typing import Dict
 
-from src.ad_generator import configure_logging, generate_ad_image, colors_recommendation
+from src.ad_generator import configure_logging, generate_ad_image
 
 # Initialize FastAPI app
 app = FastAPI(title="AD-AI API", description="AI-powered advertisement generator")
+
+# Store active generation tasks
+active_generations: Dict[str, asyncio.Task] = {}
 
 # Configure CORS
 app.add_middleware(
@@ -78,36 +83,6 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
 
-@app.post("/recommend-colors")
-async def recommend_colors(
-    product_name: str = Form(...),
-    file_id: str = Form(...)
-):
-    """Get AI color recommendations for a product"""
-    try:
-        # Find uploaded file
-        uploaded_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(file_id)]
-        if not uploaded_files:
-            raise HTTPException(status_code=404, detail="Uploaded image not found")
-        
-        image_path = os.path.join(UPLOAD_DIR, uploaded_files[0])
-        
-        # Get color recommendations
-        logger.info(f"Getting color recommendations for {product_name}")
-        recommended_colors = colors_recommendation(product_name, image_path)
-        
-        return {
-            "success": True,
-            "product_name": product_name,
-            "recommended_colors": recommended_colors,
-            "message": f"AI recommends these colors for {product_name}"
-        }
-        
-    except Exception as e:
-        logger.error(f"Color recommendation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get color recommendations: {str(e)}")
-
-
 @app.post("/generate-ad")
 async def generate_ad(
     product_name: str = Form(...),
@@ -138,16 +113,46 @@ async def generate_ad(
         logger.info(f"Generating ad for {product_name} by {brand_name}")
         logger.info(f"Use smart colors: {use_smart_colors}, Manual colors: {colors_list}")
         
-        # Generate the advertisement
-        result_file = generate_ad_image(
-            product_name=product_name,
-            brand_name=brand_name,
-            image_path=image_path,
-            output_filename=output_filename,
-            number_of_colors=number_of_colors,
-            colors=colors_list,
-            use_smart_colors=use_smart_colors
-        )
+        # Create async wrapper for the generation function
+        async def async_generate_ad():
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: generate_ad_image(
+                    product_name=product_name,
+                    brand_name=brand_name,
+                    image_path=image_path,
+                    output_filename=output_filename,
+                    number_of_colors=number_of_colors,
+                    colors=colors_list,
+                    use_smart_colors=use_smart_colors
+                )
+            )
+        
+        # Create and store the task
+        task = asyncio.create_task(async_generate_ad())
+        active_generations[file_id] = task
+        
+        try:
+            # Wait for the generation to complete
+            result = await task
+        except asyncio.CancelledError:
+            logger.info(f"Generation cancelled for {file_id}")
+            raise HTTPException(status_code=499, detail="Generation cancelled by user")
+        finally:
+            # Clean up the task from active generations
+            active_generations.pop(file_id, None)
+        
+        # Extract result data
+        if isinstance(result, dict):
+            result_file = result["output_filename"]
+            colors_used = result["colors_used"]
+            num_colors = result["number_of_colors"]
+        else:
+            # Backward compatibility
+            result_file = result
+            colors_used = colors_list if colors_list else []
+            num_colors = number_of_colors if number_of_colors else 0
         
         return {
             "success": True,
@@ -155,11 +160,19 @@ async def generate_ad(
             "brand_name": brand_name,
             "output_file": result_file,
             "download_url": f"/download/{os.path.basename(result_file)}",
+            "colors_used": colors_used,
+            "number_of_colors": num_colors,
+            "use_smart_colors": use_smart_colors,
             "message": "Advertisement generated successfully"
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         logger.error(f"Ad generation failed: {e}")
+        # Clean up the task from active generations on error
+        active_generations.pop(file_id, None)
         raise HTTPException(status_code=500, detail=f"Failed to generate advertisement: {str(e)}")
 
 
@@ -203,6 +216,29 @@ async def cleanup_files(file_id: str):
     except Exception as e:
         logger.error(f"Cleanup failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cleanup files: {str(e)}")
+
+
+@app.post("/cancel-generation/{file_id}")
+async def cancel_generation(file_id: str):
+    """Cancel an ongoing ad generation"""
+    try:
+        if file_id in active_generations:
+            task = active_generations[file_id]
+            task.cancel()
+            del active_generations[file_id]
+            logger.info(f"Generation cancelled for {file_id}")
+            return {
+                "success": True,
+                "message": f"Generation cancelled for {file_id}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "No active generation found for this file_id"
+            }
+    except Exception as e:
+        logger.error(f"Cancel generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel generation: {str(e)}")
 
 
 if __name__ == "__main__":
