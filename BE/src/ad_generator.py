@@ -70,12 +70,12 @@ def create_template_prompt(product_name, brand_name, number_of_colors=None, colo
         logger.info(f"Randomly selected number of colors: {number_of_colors}")
     
     # Define a list of vibrant colors to choose from
-    color_options = [
-        "electric blue", "neon green", "hot pink", "bright orange", "deep purple",
-        "crimson red", "golden yellow", "turquoise", "magenta", "lime green",
-        "coral", "royal blue", "emerald green", "sunset orange", "violet",
-        "teal", "ruby red", "amber", "indigo", "chartreuse"
-    ]
+    # color_options = [
+    #     "electric blue", "neon green", "hot pink", "bright orange", "deep purple",
+    #     "crimson red", "golden yellow", "turquoise", "magenta", "lime green",
+    #     "coral", "royal blue", "emerald green", "sunset orange", "violet",
+    #     "teal", "ruby red", "amber", "indigo", "chartreuse"
+    # ]
     
     # Randomly select colors if not provided
     if colors is None:
@@ -235,7 +235,13 @@ def generate_ad_image(product_name="perfume", brand_name="FROM INDEXES",
         save_image(image_bytes, output_filename)
         
         logger.info("AD image generation completed successfully")
-        return output_filename
+        
+        # Return both the filename and the colors used
+        return {
+            "output_filename": output_filename,
+            "colors_used": colors if colors else [],
+            "number_of_colors": number_of_colors if number_of_colors else 0
+        }
         
     except Exception as e:
         logger.error(f"AD image generation failed: {e}")
@@ -383,7 +389,7 @@ def main():
         
         # Demo: Generate with smart color recommendations
         logger.info("Demo 1: Using smart color recommendations...")
-        result_file = generate_ad_image(
+        result = generate_ad_image(
             product_name=product_name,
             brand_name=brand_name,
             image_path=image_path,
@@ -391,18 +397,32 @@ def main():
             use_smart_colors=True
         )
         
-        logger.info(f"Smart colors demo completed. Output: {result_file}")
+        # Handle new return format
+        if isinstance(result, dict):
+            result_file = result["output_filename"]
+            colors_used = result["colors_used"]
+            logger.info(f"Smart colors demo completed. Output: {result_file}, Colors used: {colors_used}")
+        else:
+            result_file = result
+            logger.info(f"Smart colors demo completed. Output: {result_file}")
         
         # Demo: Generate with random colors
         logger.info("Demo 2: Using random color selection...")
-        result_file_random = generate_ad_image(
+        result_random = generate_ad_image(
             product_name=product_name,
             brand_name=brand_name,
             image_path=image_path,
             output_filename=f"random_{output_filename}"
         )
         
-        logger.info(f"Random colors demo completed. Output: {result_file_random}")
+        # Handle new return format
+        if isinstance(result_random, dict):
+            result_file_random = result_random["output_filename"]
+            logger.info(f"Random colors demo completed. Output: {result_file_random}")
+        else:
+            result_file_random = result_random
+            logger.info(f"Random colors demo completed. Output: {result_file_random}")
+            
         logger.info(f"AD-AI application completed successfully")
         return result_file
         
