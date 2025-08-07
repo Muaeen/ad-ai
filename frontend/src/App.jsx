@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { SignedIn, SignedOut, SignInButton, SignUpButton } from '@clerk/clerk-react'
 import Header from './components/Header'
 import ImageUpload from './components/ImageUpload'
@@ -99,9 +99,9 @@ function App() {
     willChange: 'transform'
   }
 
-  const updateFormData = (data) => {
+  const updateFormData = useCallback((data) => {
     setFormData(prev => ({ ...prev, ...data }))
-  }
+  }, [])
 
   const nextStep = () => {
     if (currentStep < steps.length) {

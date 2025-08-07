@@ -19,6 +19,30 @@ body {
   padding: 0 1rem;
 }
 
+/* Clerk User Avatar Override */
+.cl-avatarImage.cl-userButtonAvatarImage,
+.cl-internal-fhootk {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  width: 60px !important;
+  height: 60px !important;
+  z-index: 1000 !important;
+  border: 3px solid white !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  cursor: pointer !important;
+}
+
+/* Anchor dropdown panel to the button */
+.cl-userButtonPopoverCard.cl-popoverBox.cl-userButton-popover,
+.cl-internal-1mskvr2 {
+  position: fixed !important;
+  top: 85px !important;
+  right: 20px !important;
+  z-index: 1001 !important;
+}
+
 /* Header */
 header {
   background: linear-gradient(135deg, #2563eb 0%, #9333ea 50%, #ec4899 100%);

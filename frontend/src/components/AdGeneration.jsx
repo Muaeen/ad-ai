@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, Download, RefreshCw, Zap, CheckCircle, Loader, RotateCcw } from 'lucide-react'
 import { generateAd, downloadAd, cleanupFiles, cancelGeneration } from '../services/api'
 import { motion } from 'framer-motion'
@@ -8,6 +8,7 @@ const AdGeneration = ({ formData, updateFormData, onPrev, onReset, isGenerating,
   const [error, setError] = useState('')
   const [isDownloading, setIsDownloading] = useState(false)
   const hasGeneratedRef = useRef(false)
+  const requestInProgressRef = useRef(false)
   
   // Cleanup on component unmount during generation
   useEffect(() => {
@@ -87,17 +88,23 @@ const AdGeneration = ({ formData, updateFormData, onPrev, onReset, isGenerating,
     return colors
   }
   
-  useEffect(() => {
-    // Only generate if we haven't generated before and no ad exists
-    if (!formData.generatedAd && !hasGeneratedRef.current && !isGenerating) {
-      hasGeneratedRef.current = true
-      handleGenerate()
-    }
-  }, []) // Empty dependency array to run only once
+  // Remove the automatic generation useEffect - only generate when user explicitly requests it
+  // useEffect(() => {
+  //   if (!formData.generatedAd && !hasGeneratedRef.current && !isGenerating) {
+  //     hasGeneratedRef.current = true
+  //     handleGenerate()
+  //   }
+  // }, [])
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     // Prevent multiple simultaneous generations
-    if (isGenerating) return
+    if (isGenerating || requestInProgressRef.current) {
+      console.log('Generation already in progress, skipping...')
+      return
+    }
+    
+    // Set request in progress flag
+    requestInProgressRef.current = true
     
     // Create new AbortController for this request
     const controller = new AbortController()
@@ -165,15 +172,17 @@ const AdGeneration = ({ formData, updateFormData, onPrev, onReset, isGenerating,
     } finally {
       setIsGenerating(false)
       setAbortController(null)
+      requestInProgressRef.current = false // Reset request flag
       clearInterval(progressInterval)
     }
-  }
+  }, [isGenerating, formData, setIsGenerating, setAbortController, updateFormData])
 
-  const handleManualGenerate = () => {
+  const handleManualGenerate = useCallback(() => {
     // Reset the ref to allow manual regeneration
     hasGeneratedRef.current = false
+    requestInProgressRef.current = false
     handleGenerate()
-  }
+  }, [handleGenerate])
 
   const handleDownload = () => {
     if (formData.generatedAd?.output_file) {
@@ -522,7 +531,15 @@ const AdGeneration = ({ formData, updateFormData, onPrev, onReset, isGenerating,
             <div className="aspect-square bg-gray-100 rounded-xl flex items-center justify-center">
               <div className="text-center">
                 <Zap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">Advertisement will appear here</p>
+                <p className="text-gray-500 mb-4">Ready to generate your advertisement</p>
+                <button
+                  onClick={handleGenerate}
+                  className="btn-primary flex items-center"
+                  disabled={isGenerating}
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Generate Advertisement
+                </button>
               </div>
             </div>
           )}

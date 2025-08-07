@@ -1,17 +1,20 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { ArrowLeft, ArrowRight, Package, Building2 } from 'lucide-react'
 
 const ProductDetails = ({ formData, updateFormData, onNext, onPrev }) => {
   const [errors, setErrors] = useState({})
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = useCallback((field, value) => {
     updateFormData({ [field]: value })
     
-    // Clear error when user starts typing
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
-    }
-  }
+    // Clear error when user starts typing  
+    setErrors(prev => {
+      if (prev[field]) {
+        return { ...prev, [field]: '' }
+      }
+      return prev
+    })
+  }, [updateFormData])
 
   const validateForm = () => {
     const newErrors = {}
