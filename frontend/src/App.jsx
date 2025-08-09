@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { SignedIn, SignedOut, SignInButton, SignUpButton } from '@clerk/clerk-react'
-import Header from './components/Header'
+import { SignedIn, SignedOut } from '@clerk/clerk-react'
+import Layout from './components/Layout'
+import HomePage from './components/HomePage'
 import ImageUpload from './components/ImageUpload'
 import ProductDetails from './components/ProductDetails'
 import ColorSelection from './components/ColorSelection'
 import AdGeneration from './components/AdGeneration'
 import ProgressBar from './components/ProgressBar'
-import { Sparkles, Image, Palette, Zap } from 'lucide-react'
+import { Image, Palette, Sparkles, Zap } from 'lucide-react'
 import { cancelGeneration } from './services/api'
 
 const steps = [
@@ -17,6 +18,7 @@ const steps = [
 ]
 
 function App() {
+  const hasClerk = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
   const [currentStep, setCurrentStep] = useState(1)
   const [isGenerating, setIsGenerating] = useState(false)
   const [abortController, setAbortController] = useState(null)
@@ -72,32 +74,7 @@ function App() {
     }
   }, [isGenerating, abortController])
 
-  const buttonStyle = {
-    appearance: 'none',
-    backgroundColor: 'transparent',
-    border: '0.125em solid #1A1A1A',
-    borderRadius: '0.9375em',
-    boxSizing: 'border-box',
-    color: '#3B3B3B',
-    cursor: 'pointer',
-    display: 'inline-block',
-    fontFamily: 'Roobert,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol"',
-    fontSize: '16px',
-    fontWeight: '600',
-    lineHeight: 'normal',
-    margin: '0 0.5rem',
-    minHeight: '3em',
-    minWidth: '0',
-    outline: 'none',
-    padding: '0.75em 1.8em',
-    textAlign: 'center',
-    textDecoration: 'none',
-    transition: 'all 300ms cubic-bezier(.23, 1, 0.32, 1)',
-    userSelect: 'none',
-    WebkitUserSelect: 'none',
-    touchAction: 'manipulation',
-    willChange: 'transform'
-  }
+
 
   const updateFormData = useCallback((data) => {
     setFormData(prev => ({ ...prev, ...data }))
@@ -176,47 +153,41 @@ function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Header />
-      
-      <main>
-        <div className="container">
+    <Layout>
+      {/* If Clerk not configured, treat as signed out to render public home */}
+      {!hasClerk ? (
+        <HomePage />
+      ) : (
+        <>
           <SignedOut>
-            <div className="text-center py-20">
-              <div className="max-w-lg mx-auto bg-white/10 backdrop-blur-lg rounded-2xl p-10 border border-white/20">
-                <div className="mb-6">
-                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Sparkles className="w-8 h-8 text-white" />
-                  </div>
-                  <h2 className="text-3xl font-bold text-white mb-4">Welcome to AD-AI Generator</h2>
-                </div>
-                <p className="text-white/80 mb-8">
-                  Please sign in to start creating stunning advertisements with AI-powered design
-                </p>
-                <div className="flex flex-col sm:flex-row justify-center gap-12">
-                  <SignInButton style={buttonStyle} className="group hover:text-white hover:bg-black hover:shadow-lg hover:-translate-y-0.5 active:shadow-none active:translate-y-0">
-                    Sign In
-                  </SignInButton>
-                  <SignUpButton style={buttonStyle} className="group hover:text-white hover:bg-black hover:shadow-lg hover:-translate-y-0.5 active:shadow-none active:translate-y-0">
-                    Sign Up
-                  </SignUpButton>
-                </div>
-              </div>
-            </div>
+            <HomePage />
           </SignedOut>
 
           <SignedIn>
-            {/* Progress Section */}
-            <ProgressBar steps={steps} currentStep={currentStep} />
+            <div className="container mx-auto px-4 py-8">
 
-            {/* Step Content */}
-            <div>
-              {renderStep()}
+              {/* App Header for Signed In Users */}
+              <div className="text-center mb-8 pt-8">
+                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  Create Your Advertisement
+                </h1>
+                <p className="text-gray-600 max-w-2xl mx-auto">
+                  Follow the steps below to transform your product image into a professional advertisement
+                </p>
+              </div>
+
+              {/* Progress Section */}
+              <ProgressBar steps={steps} currentStep={currentStep} />
+
+              {/* Step Content */}
+              <div className="mt-8">
+                {renderStep()}
+              </div>
             </div>
           </SignedIn>
-        </div>
-      </main>
-    </div>
+        </>
+      )}
+    </Layout>
   )
 }
 

@@ -5,15 +5,24 @@ import './index.css'
 import App from './App.jsx'
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const hasClerk = Boolean(clerkPubKey)
 
-if (!clerkPubKey) {
-  throw new Error("Missing Publishable Key")
-}
+const root = createRoot(document.getElementById('root'))
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <ClerkProvider publishableKey={clerkPubKey}>
+if (hasClerk) {
+  root.render(
+    <StrictMode>
+      <ClerkProvider publishableKey={clerkPubKey}>
+        <App />
+      </ClerkProvider>
+    </StrictMode>,
+  )
+} else {
+  // Dev fallback: Render app without Clerk so the public homepage loads
+  // Authentication-specific components are gated inside the app
+  root.render(
+    <StrictMode>
       <App />
-    </ClerkProvider>
-  </StrictMode>,
-)
+    </StrictMode>,
+  )
+}

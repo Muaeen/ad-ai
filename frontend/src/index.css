@@ -1,3 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animations */
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
 /* Reset and base styles */
 * {
   margin: 0;
@@ -7,10 +39,10 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  background: linear-gradient(135deg, #f8fafc 0%, #dbeafe 100%);
   min-height: 100vh;
   line-height: 1.6;
   color: #1f2937;
+  overflow-x: hidden;
 }
 
 .container {
@@ -19,54 +51,20 @@ body {
   padding: 0 1rem;
 }
 
-/* Clerk User Avatar Override */
-.cl-avatarImage.cl-userButtonAvatarImage,
-.cl-internal-fhootk {
-  position: fixed !important;
-  top: 20px !important;
-  right: 20px !important;
-  width: 60px !important;
-  height: 60px !important;
-  z-index: 1000 !important;
-  border: 3px solid white !important;
-  border-radius: 50% !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-  cursor: pointer !important;
+/* Clerk Customization */
+.cl-userButtonBox {
+  display: inline-flex;
 }
 
-/* Anchor dropdown panel to the button */
-.cl-userButtonPopoverCard.cl-popoverBox.cl-userButton-popover,
-.cl-internal-1mskvr2 {
-  position: fixed !important;
-  top: 85px !important;
-  right: 20px !important;
-  z-index: 1001 !important;
+.cl-userButtonTrigger {
+  border-radius: 50%;
 }
 
-/* Header */
-header {
-  background: linear-gradient(135deg, #2563eb 0%, #9333ea 50%, #ec4899 100%);
-  color: white;
-  padding: 3rem 0;
-  text-align: center;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+.cl-userButtonPopoverCard {
+  margin-top: 0.5rem;
 }
 
-header h1 {
-  font-size: 3.5rem;
-  font-weight: 800;
-  margin-bottom: 1rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
 
-header p {
-  font-size: 1.25rem;
-  margin-bottom: 1rem;
-  opacity: 0.95;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-}
 
 /* Progress Bar */
 .progress-container {
